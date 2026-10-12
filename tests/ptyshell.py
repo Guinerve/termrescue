@@ -73,7 +73,9 @@ def start_zsh(home: Path, rc_extra: str = "") -> PtyShell:
         f"{rc_extra}\n"
     )
     env = base_env(home) | {"ZDOTDIR": str(home)}
-    return PtyShell(["zsh", "-i"], env, home)
+    # -d: skip system-wide startup files (e.g. Ubuntu's /etc/zsh/zshrc runs compinit,
+    # which can stop at an interactive question), so only our .zshrc is loaded.
+    return PtyShell(["zsh", "-d", "-i"], env, home)
 
 
 def start_bash(home: Path, rc_extra: str = "") -> PtyShell:
