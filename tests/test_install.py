@@ -88,3 +88,16 @@ def test_install_powershell_fails_loudly_when_no_profile_is_found(tmp_path):
 
     with pytest.raises(NoPowerShellError):
         install("powershell", tmp_path, profiles=[])
+
+
+def test_install_into_a_utf16_profile_is_idempotent_and_keeps_the_encoding(tmp_path):
+    # Windows PowerShell 5.1 has written UTF-16 profiles by default.
+    profile = tmp_path / "Microsoft.PowerShell_profile.ps1"
+    profile.write_bytes("Set-Location C:\\code\n".encode("utf-16"))
+    install("powershell", tmp_path, profiles=[profile])
+    install("powershell", tmp_path, profiles=[profile])
+    data = profile.read_bytes()
+    assert data[:2] in (b"\xff\xfe", b"\xfe\xff")
+    text = data.decode("utf-16")
+    assert text.startswith("Set-Location C:\\code")
+    assert text.count("termrescue.ps1") == 1

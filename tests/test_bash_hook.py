@@ -36,3 +36,15 @@ def test_existing_prompt_command_still_runs(tmp_path):
         assert PROMPT_RESET in shell.output
     finally:
         shell.close()
+
+
+def test_existing_prompt_command_still_sees_the_last_exit_status(tmp_path):
+    # Prompt themes (starship, liquidprompt, powerline) colour the prompt from $?.
+    shell = start_bash(tmp_path, rc_extra="PROMPT_COMMAND='echo \"status=$?\" >> $HOME/status'")
+    try:
+        pos = shell.wait_for_prompt()
+        shell.send("false\r")
+        shell.wait_for_prompt(after=pos)
+        assert "status=1" in (tmp_path / "status").read_text()
+    finally:
+        shell.close()

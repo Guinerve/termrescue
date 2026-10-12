@@ -137,3 +137,27 @@ def test_powershell_prompt_repairs_a_broken_console_and_keeps_the_users_prompt(e
     assert not result["after"] & ENABLE_VIRTUAL_TERMINAL_INPUT
     assert result["shown"] == "MINE code=7> "
     assert result["code"] == 7
+
+
+@windows_only
+@pytest.mark.parametrize("exe", POWERSHELLS or ["pwsh"])
+def test_powershell_prompt_passes_the_last_command_status_to_the_users_prompt(exe, tmp_path):
+    # starship and oh-my-posh read $? at the start of the prompt to colour it.
+    if not shutil.which(exe):
+        pytest.skip(f"{exe} not installed")
+    result_file = tmp_path / "result.json"
+    script = tmp_path / "child.ps1"
+    script.write_text(textwrap.dedent(f"""
+        function global:prompt {{ "ok=$?" }}
+        . '{PS_HOOK}'
+        Get-Item 'C:\\termrescue-does-not-exist' -ErrorAction SilentlyContinue
+        $after_failure = prompt
+        Get-Location | Out-Null
+        $after_success = prompt
+        @{{ failure = $after_failure; success = $after_success }} |
+            ConvertTo-Json | Set-Content -Encoding UTF8 '{result_file}'
+    """))
+    result = _run_in_new_console(
+        [exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)], result_file)
+    assert result["failure"] == "ok=False"
+    assert result["success"] == "ok=True"
