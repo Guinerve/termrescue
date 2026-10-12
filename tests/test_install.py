@@ -1,0 +1,69 @@
+from termrescue.install import hook_text, install, uninstall
+
+
+def test_install_zsh_writes_the_hook_and_sources_it_from_zshrc(tmp_path):
+    (tmp_path / ".zshrc").write_text("export EDITOR=vim\n")
+    changed = install("zsh", tmp_path)
+    assert (tmp_path / ".termrescue.zsh").read_text() == hook_text("zsh")
+    rc = (tmp_path / ".zshrc").read_text()
+    assert rc.startswith("export EDITOR=vim\n")
+    assert "source ~/.termrescue.zsh" in rc
+    assert changed == [tmp_path / ".zshrc"]
+
+
+def test_install_twice_does_not_add_a_second_source_line(tmp_path):
+    install("bash", tmp_path)
+    install("bash", tmp_path)
+    assert (tmp_path / ".bashrc").read_text().count("termrescue.bash") == 1
+
+
+def test_install_powershell_creates_missing_profiles_and_dot_sources_the_hook(tmp_path):
+    ps7 = tmp_path / "Documents" / "PowerShell" / "Microsoft.PowerShell_profile.ps1"
+    ps5 = tmp_path / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
+    ps5.parent.mkdir(parents=True)
+    ps5.write_text("Set-PSReadLineOption -EditMode Emacs\n")
+    changed = install("powershell", tmp_path, profiles=[ps7, ps5])
+    hook = tmp_path / ".termrescue.ps1"
+    assert hook.read_text() == hook_text("powershell")
+    for profile in (ps7, ps5):
+        assert f". '{hook}'" in profile.read_text()
+    assert ps5.read_text().startswith("Set-PSReadLineOption")
+    assert changed == [ps7, ps5]
+
+
+def test_uninstall_removes_the_source_line_and_the_hook(tmp_path):
+    (tmp_path / ".zshrc").write_text("export EDITOR=vim\n")
+    install("zsh", tmp_path)
+    uninstall("zsh", tmp_path)
+    assert (tmp_path / ".zshrc").read_text() == "export EDITOR=vim\n"
+    assert not (tmp_path / ".termrescue.zsh").exists()
+
+
+def test_cli_install_and_uninstall_use_the_home_directory(tmp_path, monkeypatch, capsys):
+    from termrescue.cli import main
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    assert main(["install", "zsh"]) == 0
+    assert "source ~/.termrescue.zsh" in (tmp_path / ".zshrc").read_text()
+    assert ".zshrc" in capsys.readouterr().out
+    assert main(["uninstall", "zsh"]) == 0
+    assert "termrescue" not in (tmp_path / ".zshrc").read_text()
+
+
+def test_cli_init_prints_the_powershell_hook(capsys):
+    from termrescue.cli import main
+
+    assert main(["init", "powershell"]) == 0
+    assert capsys.readouterr().out == hook_text("powershell")
+
+
+def test_install_keeps_windows_line_endings_intact(tmp_path):
+    profile = tmp_path / "profile.ps1"
+    profile.write_bytes(b"Import-Module posh-git\r\nSet-Alias g git\r\n")
+    install("powershell", tmp_path, profiles=[profile])
+    data = profile.read_bytes()
+    assert b"\r\r\n" not in data
+    assert data.startswith(b"Import-Module posh-git")
+    uninstall("powershell", tmp_path, profiles=[profile])
+    assert b"termrescue" not in profile.read_bytes()
