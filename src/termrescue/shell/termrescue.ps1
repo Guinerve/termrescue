@@ -47,9 +47,12 @@ function global:Repair-TermRescueConsole {
 
 $global:TermRescueOriginalPrompt = $function:prompt
 function global:prompt {
+    $lastSucceeded = $?   # read first: every statement below resets it
     $exitCode = $global:LASTEXITCODE
     $global:TermRescuePromptCount++
     try { Repair-TermRescueConsole } catch { }
     $global:LASTEXITCODE = $exitCode
+    # Prompt themes (starship, oh-my-posh) read $? to show a failure; recreate it.
+    if (-not $lastSucceeded) { Write-Error '' -ErrorAction Ignore }
     & $global:TermRescueOriginalPrompt
 }

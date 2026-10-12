@@ -128,10 +128,10 @@ CI runs on Windows, macOS and Linux. The integration tests drive real shells and
 
 | Platform | What the tests do |
 |---|---|
-| **Windows** | Open a brand-new console, break it the way a dying `ssh.exe` does, then check that `termrescue fix` and the PowerShell hook repair it. The hook is tested in both **Windows PowerShell 5.1 and PowerShell 7**, including that your own prompt and `$LASTEXITCODE` survive. |
-| **zsh** | Run an interactive zsh in a pseudo-terminal. A program enables mouse reporting and is killed with `kill -9`, and the next prompt must reset it. Queued mouse reports followed by `echo kept` must run exactly `echo kept`. Without termrescue, zsh runs `35` and `23Mecho` as commands, and the test reproduces that. |
-| **bash** | Same reset check, and an existing `PROMPT_COMMAND` must keep working. |
-| **Everywhere** | `doctor`'s side of the terminal conversation, install idempotence with UTF-16 profiles and Windows line endings, and a check that every hook sends exactly the same reset sequence. |
+| **Windows** | Open a brand-new console, break it the way a dying `ssh.exe` does, then check that `termrescue fix` and the PowerShell hook repair it. The hook is tested in both **Windows PowerShell 5.1 and PowerShell 7**, including that your own prompt, `$LASTEXITCODE` and `$?` survive, so prompt themes such as starship still show failures. |
+| **zsh** | Run an interactive zsh in a pseudo-terminal. A program enables mouse reporting and is killed with `kill -9`, and the next prompt must reset it. Queued mouse reports followed by `echo kept` must run exactly `echo kept` (without termrescue, zsh would run fragments like `35` and `23Mecho` as commands). |
+| **bash** | Same reset check, and an existing `PROMPT_COMMAND` must keep working and still see the last command's exit status. |
+| **Everywhere** | `doctor`'s side of the terminal conversation, install idempotence (including UTF-16 profiles, and Windows line endings on Windows), and a check that every hook sends exactly the same reset sequence. |
 
 ```sh
 uv run pytest -v -rs
