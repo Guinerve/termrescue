@@ -67,3 +67,24 @@ def test_install_keeps_windows_line_endings_intact(tmp_path):
     assert data.startswith(b"Import-Module posh-git")
     uninstall("powershell", tmp_path, profiles=[profile])
     assert b"termrescue" not in profile.read_bytes()
+
+
+def test_windows_powershell_is_found_at_its_standard_path_when_not_on_path(tmp_path, monkeypatch):
+    from termrescue import install as install_module
+
+    exe = tmp_path / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setattr(install_module.shutil, "which", lambda name: None)
+    monkeypatch.setattr(install_module.sys, "platform", "win32")
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+    assert install_module.powershell_executables() == [str(exe)]
+
+
+def test_install_powershell_fails_loudly_when_no_profile_is_found(tmp_path):
+    import pytest
+
+    from termrescue.install import NoPowerShellError
+
+    with pytest.raises(NoPowerShellError):
+        install("powershell", tmp_path, profiles=[])

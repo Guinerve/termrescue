@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 from importlib.resources import files
 from pathlib import Path
 
 SHELLS = ("zsh", "bash", "powershell")
 _SOURCE_FILES = {"zsh": "termrescue.zsh", "bash": "termrescue.bash", "powershell": "termrescue.ps1"}
 _MARK = "# termrescue"
+
+
+class NoPowerShellError(LookupError):
+    pass
 
 
 def hook_text(shell: str) -> str:
@@ -20,12 +26,28 @@ def hook_path(shell: str, home: Path) -> Path:
     return home / f".{_SOURCE_FILES[shell]}"
 
 
+def powershell_executables() -> list[str]:
+    """PowerShell 7+ and Windows PowerShell 5.1, whichever are installed.
+
+    Windows PowerShell is also looked for at its standard location, because
+    some machines don't have it on PATH.
+    """
+    found = []
+    for name in ("pwsh", "powershell"):
+        path = shutil.which(name)
+        if path is None and name == "powershell" and sys.platform == "win32":
+            standard = (Path(os.environ.get("SystemRoot", r"C:\Windows"))
+                        / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe")
+            path = str(standard) if standard.exists() else None
+        if path:
+            found.append(path)
+    return found
+
+
 def powershell_profiles() -> list[Path]:
     """$PROFILE for each PowerShell edition installed (7+ and Windows PowerShell 5.1)."""
     profiles = []
-    for exe in ("pwsh", "powershell"):
-        if not shutil.which(exe):
-            continue
+    for exe in powershell_executables():
         result = subprocess.run(
             [exe, "-NoProfile", "-NonInteractive", "-Command", "$PROFILE.CurrentUserCurrentHost"],
             capture_output=True, text=True, check=False, timeout=60)
@@ -39,7 +61,10 @@ def _rc_files(shell: str, home: Path, profiles: list[Path] | None) -> list[Path]
         return [home / ".zshrc"]
     if shell == "bash":
         return [home / ".bashrc"]
-    return profiles if profiles is not None else powershell_profiles()
+    rc_files = profiles if profiles is not None else powershell_profiles()
+    if not rc_files:
+        raise NoPowerShellError("couldn't find PowerShell or its profile path")
+    return rc_files
 
 
 def _source_line(shell: str, hook: Path) -> str:
@@ -61,11 +86,12 @@ def _read(path: Path) -> tuple[str, str]:
 
 def install(shell: str, home: Path, profiles: list[Path] | None = None) -> list[Path]:
     """Install the hook; return the rc files that were changed."""
+    rc_files = _rc_files(shell, home, profiles)  # fails before writing anything
     hook = hook_path(shell, home)
     hook.write_text(hook_text(shell), encoding="utf-8")
     line = _source_line(shell, hook)
     changed = []
-    for rc in _rc_files(shell, home, profiles):
+    for rc in rc_files:
         text, encoding = _read(rc)
         if any(existing.rstrip().endswith(_MARK) for existing in text.splitlines()):
             continue
@@ -92,9 +118,11 @@ def uninstall(shell: str, home: Path, profiles: list[Path] | None = None) -> lis
 
 def execution_policy_warning() -> str | None:
     """Windows PowerShell 5.1 refuses to run profile scripts under some policies."""
-    if not shutil.which("powershell"):
+    windows_powershell = [exe for exe in powershell_executables()
+                          if Path(exe).stem.lower() == "powershell"]
+    if not windows_powershell:
         return None
-    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+    result = subprocess.run([windows_powershell[0], "-NoProfile", "-NonInteractive", "-Command",
                              "Get-ExecutionPolicy"],
                             capture_output=True, text=True, check=False, timeout=60)
     policy = result.stdout.strip()

@@ -53,7 +53,18 @@ def cmd_install(args: argparse.Namespace) -> int:
         print("termrescue install: name a shell (zsh, bash or powershell)")
         return 2
     home = Path.home()
-    if args.cmd == "uninstall":
+    try:
+        return _install_or_uninstall(args.cmd, shell, home)
+    except install.NoPowerShellError:
+        print("termrescue: couldn't find PowerShell's profile. Install the hook by hand: run\n"
+              f"  termrescue init powershell > {install.hook_path(shell, home)}\n"
+              "then add this line to the file that `$PROFILE` names:\n"
+              f"  . '{install.hook_path(shell, home)}'")
+        return 1
+
+
+def _install_or_uninstall(cmd: str, shell: str, home: Path) -> int:
+    if cmd == "uninstall":
         changed = install.uninstall(shell, home)
         for rc in changed:
             print(f"Removed termrescue from {rc}")
