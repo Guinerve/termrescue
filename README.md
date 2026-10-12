@@ -150,3 +150,7 @@ uv run pytest -v -rs
 - [ ] winget / Scoop / Homebrew packages
 - [ ] Hand-verified support table: Windows Terminal, iTerm2, Ghostty, Terminal.app, kitty, WezTerm
 - [ ] Recorded demo GIF
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
