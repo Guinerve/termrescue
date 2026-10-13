@@ -17,6 +17,8 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from .terminal import NoTerminalError
+
 ENABLE_PROCESSED_INPUT = 0x0001
 ENABLE_LINE_INPUT = 0x0002
 ENABLE_ECHO_INPUT = 0x0004
@@ -38,7 +40,7 @@ def describe_input_mode(mode: int) -> str:
             "(normal for PowerShell and cmd).")
 
 
-class NoConsoleError(OSError):
+class NoConsoleError(NoTerminalError):
     pass
 
 

@@ -17,7 +17,7 @@ _termrescue_reset() {
   return $status
 }
 
-case ";${PROMPT_COMMAND};" in
+case ";${PROMPT_COMMAND-};" in
   *";_termrescue_reset;"*) ;;
   *) PROMPT_COMMAND="_termrescue_reset${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
 esac

@@ -10,6 +10,10 @@ from contextlib import AbstractContextManager, contextmanager
 from typing import Protocol
 
 
+class NoTerminalError(OSError):
+    """There is no terminal or console to talk to (for example, output goes to a file)."""
+
+
 class Terminal(Protocol):
     def write(self, text: str) -> None: ...
 
@@ -76,7 +80,10 @@ class PosixTerminal:
 
 @contextmanager
 def open_terminal() -> Iterator[Terminal]:
-    """The user's terminal: the Windows console, /dev/tty, or else stdin/stdout."""
+    """The user's terminal: the Windows console, /dev/tty, or else stdin and stdout.
+
+    Raises NoTerminalError if there is none, so escape codes never go into a pipe or file.
+    """
     if sys.platform == "win32":
         from .winconsole import WindowsTerminal
 
@@ -89,6 +96,8 @@ def open_terminal() -> Iterator[Terminal]:
     try:
         fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
     except OSError:
+        if not (os.isatty(0) and os.isatty(1)):
+            raise NoTerminalError("no terminal attached") from None
         yield PosixTerminal(0, 1)
         return
     try:

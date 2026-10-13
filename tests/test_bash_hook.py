@@ -48,3 +48,30 @@ def test_existing_prompt_command_still_sees_the_last_exit_status(tmp_path):
         assert "status=1" in (tmp_path / "status").read_text()
     finally:
         shell.close()
+
+
+def test_hook_loads_when_the_rc_file_uses_set_u(tmp_path):
+    # With `set -u`, reading an unset PROMPT_COMMAND is an error that stops `source`.
+    shell = start_bash(tmp_path, rc_extra="set -u")
+    try:
+        pos = shell.wait_for_prompt()
+        shell.send("true\r")
+        shell.wait_for_prompt(after=pos)
+        assert PROMPT_RESET in shell.output
+        assert "unbound variable" not in shell.output
+    finally:
+        shell.close()
+
+
+def test_sourcing_the_hook_twice_adds_it_to_prompt_command_once(tmp_path):
+    # ~/.bash_profile often sources ~/.bashrc, so both files may load the hook.
+    from ptyshell import SHELL_DIR
+
+    shell = start_bash(tmp_path, rc_extra=f"source {SHELL_DIR / 'termrescue.bash'}")
+    try:
+        pos = shell.wait_for_prompt()
+        shell.send("echo \"pc=$PROMPT_COMMAND\" > $HOME/pc\r")
+        shell.wait_for_prompt(after=pos)
+        assert (tmp_path / "pc").read_text() == "pc=_termrescue_reset\n"
+    finally:
+        shell.close()

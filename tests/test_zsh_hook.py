@@ -58,3 +58,19 @@ def test_existing_line_init_widgets_still_run(tmp_path):
         assert (tmp_path / "mine-ran").read_text() == "ran"
     finally:
         shell.close()
+
+
+def test_later_precmd_hooks_still_see_the_last_exit_status(tmp_path):
+    # Prompt themes (powerlevel10k, starship) read $? in their own precmd hook.
+    rc = "theme() { print -r -- \"status=$?\" >> $HOME/status }\nadd-zsh-hook precmd theme\n"
+    shell = start_zsh(tmp_path, rc_extra=rc)
+    try:
+        pos = shell.wait_for_prompt()
+        shell.send("(exit 3)\r")
+        shell.wait_for_prompt(after=pos)
+        deadline = time.monotonic() + 5
+        while "status=3" not in (tmp_path / "status").read_text() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert (tmp_path / "status").read_text().splitlines()[-1] == "status=3"
+    finally:
+        shell.close()

@@ -134,3 +134,47 @@ def test_doctor_says_unknown_when_the_terminal_does_not_answer(tmp_path):
         assert "did not answer" in out
     finally:
         proc.close()
+
+
+# --- no terminal --------------------------------------------------------------
+
+def _run_without_a_terminal(args):
+    # A new session has no controlling terminal, so /dev/tty can't be opened.
+    return subprocess.run([*CLI, *args], capture_output=True, stdin=subprocess.DEVNULL,
+                          start_new_session=True, check=False, timeout=30,
+                          env=os.environ | {"PYTHONPATH": str(Path(__file__).parent.parent / "src")})
+
+
+@posix_only
+def test_fix_without_a_terminal_fails_and_writes_no_escape_codes_to_stdout():
+    result = _run_without_a_terminal(["fix"])
+    assert result.returncode == 1
+    assert result.stdout == b""
+    assert b"no terminal" in result.stderr
+
+
+@posix_only
+@pytest.mark.parametrize("command", ["doctor", "capture"])
+def test_commands_that_need_a_terminal_say_so_without_a_traceback(command):
+    result = _run_without_a_terminal([command])
+    assert result.returncode == 1
+    assert b"no terminal" in result.stderr
+    assert b"Traceback" not in result.stderr
+
+
+# --- run errors ---------------------------------------------------------------
+
+def test_run_reports_a_command_that_does_not_exist(capsys):
+    assert main(["run", "--", "termrescue-no-such-command"]) == 127
+    assert "termrescue-no-such-command" in capsys.readouterr().err
+
+
+# --- capture stops at the right q ---------------------------------------------
+
+def test_capture_does_not_stop_at_a_q_inside_a_repeated_mouse_report():
+    from termrescue.cli import _stop_index
+
+    x10_at_column_81 = "\x1b[M#q5"  # the column byte is "q"
+    text = x10_at_column_81 * 2 + "abc"
+    assert _stop_index(text) == -1
+    assert _stop_index(text + "q") == len(text)

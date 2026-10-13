@@ -14,6 +14,10 @@ from .reports import find_reports
 from .sequences import FULL_RESET, describe
 
 
+def _error(command: str, message: str) -> None:
+    print(f"termrescue {command}: {message}", file=sys.stderr)
+
+
 def _send_full_reset() -> bool:
     """Reset the terminal; False if there is no terminal to reset."""
     try:
@@ -30,7 +34,7 @@ def cmd_fix(args: argparse.Namespace) -> int:
         print(describe(FULL_RESET))
         return 0
     if not _send_full_reset():
-        print("termrescue fix: no terminal attached")
+        _error("fix", "no terminal attached")
         return 1
     return 0
 
@@ -94,6 +98,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         code = subprocess.call(command)
     except KeyboardInterrupt:
         code = 130
+    except OSError as exc:  # the command doesn't exist or can't be run
+        _error("run", f"can't run {command[0]}: {exc.strerror}")
+        code = 127 if isinstance(exc, FileNotFoundError) else 126
     finally:
         _send_full_reset()
     return 128 - code if code < 0 else code
@@ -103,8 +110,7 @@ def _stop_index(text: str) -> int:
     """Index of the first q or Ctrl-C that isn't inside a report, or -1."""
     covered = set()
     for report in find_reports(text):
-        start = text.index(report.raw)
-        covered.update(range(start, start + len(report.raw)))
+        covered.update(range(report.start, report.start + len(report.raw)))
     for i, ch in enumerate(text):
         if ch in "q\x03" and i not in covered:
             return i
@@ -115,7 +121,7 @@ def _describe_input(text: str) -> list[str]:
     lines = []
     pos = 0
     for report in find_reports(text):
-        start = text.index(report.raw, pos)
+        start = report.start
         if start > pos:
             lines.append(f"{repr(text[pos:start]).replace(chr(92) + 'x1b', '^['):<24}text")
         if report.kind == "mouse":
@@ -196,4 +202,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_doctor)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except terminal.NoTerminalError:
+        _error(args.cmd, "no terminal attached. Run it in a terminal window.")
+        return 1

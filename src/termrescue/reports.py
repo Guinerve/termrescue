@@ -28,6 +28,7 @@ class Report:
     kind: str  # "mouse" or "focus"
     encoding: str  # "sgr", "urxvt", "x10" for mouse; "in"/"out" for focus
     raw: str
+    start: int  # index of ``raw`` in the text it was found in
     button: int | None = None
     column: int | None = None
     row: int | None = None
@@ -35,17 +36,17 @@ class Report:
 
 
 def _to_report(m: re.Match[str]) -> Report:
-    raw = m.group(0)
+    raw, start = m.group(0), m.start()
     if m["sgr_b"] is not None:
-        return Report("mouse", "sgr", raw, int(m["sgr_b"]), int(m["sgr_x"]),
+        return Report("mouse", "sgr", raw, start, int(m["sgr_b"]), int(m["sgr_x"]),
                       int(m["sgr_y"]), released=m["sgr_end"] == "m")
     if m["urxvt_b"] is not None:
-        return Report("mouse", "urxvt", raw, int(m["urxvt_b"]) - 32,
+        return Report("mouse", "urxvt", raw, start, int(m["urxvt_b"]) - 32,
                       int(m["urxvt_x"]), int(m["urxvt_y"]))
     if m["x10"] is not None:
         b, x, y = (ord(ch) - 32 for ch in m["x10"])
-        return Report("mouse", "x10", raw, b, x, y)
-    return Report("focus", "in" if m["focus"] == "I" else "out", raw)
+        return Report("mouse", "x10", raw, start, b, x, y)
+    return Report("focus", "in" if m["focus"] == "I" else "out", raw, start)
 
 
 def find_reports(text: str) -> list[Report]:

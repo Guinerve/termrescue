@@ -101,3 +101,124 @@ def test_install_into_a_utf16_profile_is_idempotent_and_keeps_the_encoding(tmp_p
     text = data.decode("utf-16")
     assert text.startswith("Set-Location C:\\code")
     assert text.count("termrescue.ps1") == 1
+
+
+# --- regression tests ---------------------------------------------------------
+
+def test_install_zsh_uses_zdotdir_when_it_is_set(tmp_path, monkeypatch):
+    zdotdir = tmp_path / "config" / "zsh"
+    monkeypatch.setenv("ZDOTDIR", str(zdotdir))
+    changed = install("zsh", tmp_path)
+    assert changed == [zdotdir / ".zshrc"]
+    assert "source ~/.termrescue.zsh" in (zdotdir / ".zshrc").read_text()
+    assert not (tmp_path / ".zshrc").exists()
+    assert uninstall("zsh", tmp_path) == [zdotdir / ".zshrc"]
+    assert "termrescue" not in (zdotdir / ".zshrc").read_text()
+
+
+def _on_macos(monkeypatch):
+    from termrescue import install as install_module
+
+    monkeypatch.setattr(install_module.sys, "platform", "darwin")
+
+
+def test_install_bash_on_macos_also_adds_the_existing_bash_profile(tmp_path, monkeypatch):
+    # Terminal.app starts login shells, which read ~/.bash_profile and not ~/.bashrc.
+    _on_macos(monkeypatch)
+    (tmp_path / ".bash_profile").write_text("export PATH=/opt/bin:$PATH\n")
+    changed = install("bash", tmp_path)
+    assert changed == [tmp_path / ".bashrc", tmp_path / ".bash_profile"]
+    assert "termrescue.bash" in (tmp_path / ".bash_profile").read_text()
+    assert not (tmp_path / ".profile").exists()
+    uninstall("bash", tmp_path)
+    assert (tmp_path / ".bash_profile").read_text() == "export PATH=/opt/bin:$PATH\n"
+
+
+def test_install_bash_on_macos_does_not_create_a_bash_profile_that_hides_profile(
+        tmp_path, monkeypatch):
+    # A new ~/.bash_profile would stop bash from reading the user's ~/.profile.
+    _on_macos(monkeypatch)
+    (tmp_path / ".profile").write_text("export LANG=en_AU.UTF-8\n")
+    install("bash", tmp_path)
+    assert not (tmp_path / ".bash_profile").exists()
+    assert "termrescue.bash" in (tmp_path / ".profile").read_text()
+
+
+def test_the_line_in_profile_is_safe_for_sh_and_loads_the_hook_in_bash(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+    import sys
+
+    import pytest
+
+    if sys.platform == "win32" or shutil.which("sh") is None or shutil.which("bash") is None:
+        pytest.skip("needs a Unix sh and bash")
+    _on_macos(monkeypatch)
+    (tmp_path / ".profile").write_text("export LANG=en_AU.UTF-8\n")
+    install("bash", tmp_path)
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    sh = subprocess.run(["sh", "-c", ". ~/.profile && echo ok"], env=env,
+                        capture_output=True, text=True, check=False)
+    assert (sh.stdout, sh.stderr) == ("ok\n", "")
+    bash = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-i", "-c", ". ~/.profile; declare -F _termrescue_reset"],
+        env=env, capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL)
+    assert "_termrescue_reset" in bash.stdout
+
+
+def test_install_bash_on_macos_creates_profile_when_there_is_no_login_file(tmp_path, monkeypatch):
+    _on_macos(monkeypatch)
+    install("bash", tmp_path)
+    assert not (tmp_path / ".bash_profile").exists()
+    assert "termrescue.bash" in (tmp_path / ".profile").read_text()
+
+
+def test_a_users_own_line_ending_in_the_marker_is_neither_skipped_nor_removed(tmp_path):
+    mine = "alias tr='termrescue fix'  # termrescue\n"
+    (tmp_path / ".zshrc").write_text(mine)
+    assert install("zsh", tmp_path) == [tmp_path / ".zshrc"]
+    assert "source ~/.termrescue.zsh" in (tmp_path / ".zshrc").read_text()
+    uninstall("zsh", tmp_path)
+    assert (tmp_path / ".zshrc").read_text() == mine
+
+
+def test_powershell_line_escapes_typographic_quotes_in_the_home_path(tmp_path):
+    # PowerShell ends a single-quoted string at ' and also at ‘ ’ ‚ ‛.
+    home = tmp_path / "O’Brien"
+    home.mkdir()
+    profile = tmp_path / "profile.ps1"
+    install("powershell", home, profiles=[profile])
+    escaped = str(home / ".termrescue.ps1").replace("’", "’’")
+    assert f". '{escaped}'" in profile.read_text(encoding="utf-8")
+
+
+def test_install_and_uninstall_keep_bytes_that_are_not_utf8(tmp_path):
+    # Windows PowerShell profiles saved by older Notepad are often in the ANSI code page.
+    profile = tmp_path / "profile.ps1"
+    original = b"# Caf\xe9 settings\nSet-Alias g git\n"
+    profile.write_bytes(original)
+    install("powershell", tmp_path, profiles=[profile])
+    assert profile.read_bytes().startswith(original)
+    uninstall("powershell", tmp_path, profiles=[profile])
+    assert profile.read_bytes() == original
+
+
+def test_install_keeps_the_files_own_line_endings(tmp_path):
+    profile = tmp_path / "profile.ps1"
+    profile.write_bytes(b"Import-Module posh-git\r\nSet-Alias g git\r\n")
+    install("powershell", tmp_path, profiles=[profile])
+    data = profile.read_bytes()
+    assert data.count(b"\n") == data.count(b"\r\n") == 3
+    unix = tmp_path / ".zshrc"
+    unix.write_bytes(b"export EDITOR=vim\n")
+    install("zsh", tmp_path)
+    assert b"\r" not in unix.read_bytes()
+
+
+def test_a_powershell_in_the_current_directory_is_never_used(monkeypatch):
+    # shutil.which() on Windows searches the current directory before PATH.
+    from termrescue import install as install_module
+
+    monkeypatch.setattr(install_module.shutil, "which", lambda name: f".\\{name}.EXE")
+    monkeypatch.setattr(install_module.sys, "platform", "linux")
+    assert install_module.powershell_executables() == []
