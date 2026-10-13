@@ -54,16 +54,21 @@ def _default_shell() -> str | None:
 def cmd_install(args: argparse.Namespace) -> int:
     shell = args.shell or _default_shell()
     if shell is None:
-        print("termrescue install: name a shell (zsh, bash or powershell)")
+        _error(args.cmd, "name a shell: zsh, bash or powershell")
         return 2
     home = Path.home()
     try:
         return _install_or_uninstall(args.cmd, shell, home)
     except install.NoPowerShellError:
-        print("termrescue: couldn't find PowerShell's profile. Install the hook by hand: run\n"
-              f"  termrescue init powershell > {install.hook_path(shell, home)}\n"
-              "then add this line to the file that `$PROFILE` names:\n"
-              f"  . '{install.hook_path(shell, home)}'")
+        hook = install.hook_path(shell, home)
+        if args.cmd == "uninstall":
+            _error(args.cmd, "cannot find the PowerShell profile, so nothing changed.\n"
+                   "Remove the line that ends in `# termrescue` from the file that "
+                   f"`$PROFILE` names, then delete {hook}.")
+        else:
+            _error(args.cmd, "cannot find the PowerShell profile. To install the hook by hand,"
+                   f" run:\n  termrescue init powershell > {hook}\n"
+                   f"Then add this line to the file that `$PROFILE` names:\n  . '{hook}'")
         return 1
 
 
@@ -80,7 +85,7 @@ def _install_or_uninstall(cmd: str, shell: str, home: Path) -> int:
     for rc in rc_files:
         print(f"Added it to {rc}")
     if not rc_files:
-        print("Already set up; the hook file was refreshed.")
+        print("Already set up. The hook file is now up to date.")
     if shell == "powershell":
         warning = install.execution_policy_warning()
         if warning:
@@ -92,7 +97,7 @@ def _install_or_uninstall(cmd: str, shell: str, home: Path) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
-        print("termrescue run: give a command, e.g. termrescue run -- ssh myhost")
+        _error("run", "give a command. Example: termrescue run -- ssh myhost")
         return 2
     try:
         code = subprocess.call(command)
@@ -145,8 +150,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
         print(report)
     # Raw mode first, so nothing the terminal sends after the prompt is lost.
     with terminal.open_terminal() as term, term.raw():
-        term.write(f"Press q (or wait {args.seconds:g}s) to stop. Move the mouse, click, "
-                   "switch windows: everything the terminal sends is recorded.\r\n")
+        term.write(f"Press q to stop, or wait {args.seconds:g} s. Move the mouse, click or "
+                   "switch windows. termrescue records all that the terminal sends.\r\n")
         deadline = time.monotonic() + args.seconds
         while _stop_index(text) < 0 and time.monotonic() < deadline:
             text += term.read_available(deadline - time.monotonic())
@@ -169,36 +174,38 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="termrescue",
-        description="Clear terminal modes left on by programs that died "
-                    "(e.g. mouse-reporting garbage after an SSH link drops).")
+        description="Switch off terminal modes that a dead program left on. Example: after "
+                    "an SSH link drops, mouse moves type escape codes into your shell.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p = sub.add_parser("fix", help="switch every stuck mode off now")
-    p.add_argument("--print", action="store_true", help="show the sequence instead of sending it")
+    p = sub.add_parser("fix", help="switch all stuck modes off now")
+    p.add_argument("--print", action="store_true", help="show the reset sequence, but do not send it")
     p.set_defaults(func=cmd_fix)
 
-    p = sub.add_parser("install", help="set up the shell hook (default: your current shell)")
+    p = sub.add_parser("install", help="add the prompt hook to your shell (default: your current shell)")
     p.add_argument("shell", nargs="?", choices=install.SHELLS)
     p.set_defaults(func=cmd_install)
 
-    p = sub.add_parser("uninstall", help="remove the shell hook")
+    p = sub.add_parser("uninstall", help="remove the prompt hook")
     p.add_argument("shell", nargs="?", choices=install.SHELLS)
     p.set_defaults(func=cmd_install)
 
-    p = sub.add_parser("init", help="print the shell hook")
+    p = sub.add_parser("init", help="print the hook script for a shell")
     p.add_argument("shell", choices=install.SHELLS)
     p.set_defaults(func=cmd_init)
 
-    p = sub.add_parser("run", help="run a command, then reset the terminal however it exits")
+    p = sub.add_parser("run", help="run a command, then reset the terminal when it stops")
     p.add_argument("command", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_run)
 
-    p = sub.add_parser("capture", help="show exactly what the terminal is sending")
-    p.add_argument("--seconds", type=float, default=10)
+    p = sub.add_parser("capture", help="show what the terminal sends, decoded")
+    p.add_argument("--seconds", type=float, default=10,
+                   help="stop after this many seconds (default: 10)")
     p.set_defaults(func=cmd_capture)
 
     p = sub.add_parser("doctor", help="ask the terminal which modes are on")
-    p.add_argument("--timeout", type=float, default=1.0)
+    p.add_argument("--timeout", type=float, default=1.0,
+                   help="seconds to wait for the terminal to answer (default: 1)")
     p.set_defaults(func=cmd_doctor)
 
     args = parser.parse_args(argv)

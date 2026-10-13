@@ -33,10 +33,10 @@ def repaired_input_mode(mode: int) -> int:
 
 def describe_input_mode(mode: int) -> str:
     if mode & ENABLE_VIRTUAL_TERMINAL_INPUT:
-        return (f"Console input mode 0x{mode:04X}: virtual-terminal input is ON. PowerShell and "
-                "cmd will read the terminal's escape codes (mouse reports, arrow keys) as typed "
-                "text. `termrescue fix` turns it off.")
-    return (f"Console input mode 0x{mode:04X}: virtual-terminal input is off "
+        return (f"Console input mode 0x{mode:04X}: virtual terminal input is ON. PowerShell and "
+                "cmd read the terminal's escape codes (mouse reports, arrow keys) as typed text. "
+                "`termrescue fix` turns it off.")
+    return (f"Console input mode 0x{mode:04X}: virtual terminal input is off "
             "(normal for PowerShell and cmd).")
 
 

@@ -1,7 +1,7 @@
 [project]
 name = "termrescue"
 version = "0.1.0"
-description = "Clear terminal modes (mouse reporting, focus events, ...) left on by programs that died, e.g. over a dropped SSH link."
+description = "Switch off terminal modes, such as mouse reporting, that a program left on when its SSH link dropped."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

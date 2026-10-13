@@ -194,7 +194,7 @@ def execution_policy_warning() -> str | None:
                             capture_output=True, text=True, check=False, timeout=60)
     policy = result.stdout.strip()
     if policy in ("Restricted", "AllSigned", "Undefined"):
-        return (f"Windows PowerShell's execution policy is {policy}, so it won't run your "
-                "profile. To allow your own scripts, run:\n"
+        return (f"Windows PowerShell's execution policy is {policy}, so it will not run your "
+                "profile. To let it run your own scripts, run:\n"
                 "  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned")
     return None

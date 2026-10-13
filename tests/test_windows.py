@@ -44,8 +44,8 @@ def test_repaired_input_mode_leaves_a_healthy_mode_alone():
 
 
 def test_describe_input_mode_flags_the_stuck_state():
-    assert "virtual-terminal input is ON" in describe_input_mode(AFTER_SSH_DIED)
-    assert "virtual-terminal input is off" in describe_input_mode(TYPICAL_POWERSHELL_INPUT_MODE)
+    assert "virtual terminal input is ON" in describe_input_mode(AFTER_SSH_DIED)
+    assert "virtual terminal input is off" in describe_input_mode(TYPICAL_POWERSHELL_INPUT_MODE)
 
 
 def test_powershell_hook_sends_exactly_the_prompt_reset():

@@ -50,12 +50,12 @@ def run(timeout: float) -> int:
 def _report_terminal_modes(timeout: float) -> int:
     states = query_modes(timeout)
     if states is None:
-        print(f"The terminal did not answer within {timeout:g}s, so termrescue can't tell "
-              "which modes are on.\nIf input looks wrong, run `termrescue fix` anyway.")
+        print(f"The terminal did not answer within {timeout:g} s, so termrescue cannot tell "
+              "which modes are on.\nIf the input looks wrong, run `termrescue fix`.")
         return 2
     if not states:
-        print("This terminal doesn't support mode queries (DECRQM), so the state is unknown.\n"
-              "If input looks wrong, run `termrescue fix` anyway.")
+        print("This terminal does not answer mode queries (DECRQM), so the state is unknown.\n"
+              "If the input looks wrong, run `termrescue fix`.")
         return 2
 
     for mode, name in ALL_MODES.items():

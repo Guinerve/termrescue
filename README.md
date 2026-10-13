@@ -3,27 +3,29 @@
 # termrescue
 
 **Your SSH session dropped. Now every mouse move types `[<35;45;23M` into your shell.**<br>
-termrescue fixes that automatically, at every prompt.
+termrescue switches the stuck modes off at every prompt.
 
 [![CI](https://github.com/Guinerve/termrescue/actions/workflows/ci.yml/badge.svg)](https://github.com/Guinerve/termrescue/actions/workflows/ci.yml)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2f81f7)
 ![Shells](https://img.shields.io/badge/shells-PowerShell%20%C2%B7%20zsh%20%C2%B7%20bash-8250df)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776ab)
 
-<img src="assets/before-after.svg" alt="Illustration: after a dropped SSH session, mouse movement floods PowerShell with escape codes; with termrescue the prompt stays clean" width="100%">
+<img src="assets/before-after.svg" alt="Two real zsh sessions. A program turns on mouse reporting and is killed. Without termrescue, three mouse moves become seven 'command not found' errors. With termrescue, echo hello prints hello." width="100%">
+
+<sub>Two real zsh sessions in a pseudo terminal. A script plays the terminal and sends mouse reports only while mouse mode is on. <a href="assets/record_hero.py">assets/record_hero.py</a> makes this image.</sub>
 
 </div>
 
-## Why this happens
+## Why I made this
 
-Programs that run over SSH (tmux, vim, htop, Claude Code and so on) switch your **local** terminal into *mouse-reporting mode*. When the connection drops, they never get the chance to switch it back. Your terminal keeps sending every mouse move and click as text, and your shell types it out.
+Programs that run over SSH, such as tmux, vim and Claude Code, switch your **local** terminal into mouse reporting mode. When the link drops, they never switch it back. The terminal then sends each mouse move as text, and the shell types it out.
 
-On **Windows** a second thing gets stuck. `ssh.exe` switches the console into *virtual-terminal input* mode, and if it dies without switching back, PowerShell reads raw escape codes as if you typed them, and PowerShell has no `reset` command to fall back on. termrescue repairs both.
+On Windows a second thing gets stuck. `ssh.exe` turns on the console's *virtual terminal input* mode. If ssh dies, the mode stays on and PowerShell reads raw escape codes as typing. PowerShell has no `reset` command, so the usual fix is to close the tab. I built termrescue to repair both at every prompt, with no Python in the prompt path.
 
 ## Quick start
 
 <table>
-<tr><th>Windows (PowerShell 5.1 or 7)</th><th>macOS / Linux (zsh or bash)</th></tr>
+<tr><th>Windows (PowerShell 5.1 or 7)</th><th>macOS and Linux (zsh or bash)</th></tr>
 <tr><td>
 
 ```powershell
@@ -41,21 +43,31 @@ termrescue install
 </td></tr>
 </table>
 
-Open a new terminal and you're done. termrescue needs [uv](https://docs.astral.sh/uv/getting-started/installation/) (or use `pipx install git+…`).
+Then open a new terminal window. You need [uv](https://docs.astral.sh/uv/getting-started/installation/). `pipx install git+https://github.com/Guinerve/termrescue` also works.
+
+`termrescue install` writes a hook file to your home directory and adds one line to your shell's startup file:
+
+| Shell | Startup file |
+|---|---|
+| zsh | `~/.zshrc`, or `$ZDOTDIR/.zshrc` if you set `ZDOTDIR` |
+| bash | `~/.bashrc`. On macOS also the first of `~/.bash_profile`, `~/.bash_login` and `~/.profile` that exists, because Terminal.app starts login shells. If none exists, it creates `~/.profile` |
+| PowerShell | `$PROFILE` of each edition it finds, also Windows PowerShell when it is not on `PATH` |
+
+`termrescue uninstall` removes that line and the hook file. It removes only the exact line that `install` added.
 
 <details>
 <summary><b>Windows notes</b></summary>
 
-- `termrescue install` adds one line to `$PROFILE` for every PowerShell edition it finds, including Windows PowerShell when it isn't on `PATH`.
-- If Windows PowerShell's execution policy would block your profile, `install` prints the fix: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
-- Using oh-my-posh or starship? Keep the termrescue line **after** theirs. termrescue wraps whatever prompt exists when it loads, and keeps `$LASTEXITCODE` intact.
+- If the execution policy blocks your profile, `install` tells you. The fix is `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+- If you use oh-my-posh or starship, keep the termrescue line **after** their line. termrescue wraps the prompt that exists when it loads.
+- The hook keeps `$LASTEXITCODE` and `$?`, so your prompt theme still shows failed commands.
 
 </details>
 
 <details>
-<summary><b>Recommended SSH settings</b></summary>
+<summary><b>SSH settings that help</b></summary>
 
-Add to `~/.ssh/config` (Windows: `C:\Users\<you>\.ssh\config`) so a dead link exits after about 45 seconds instead of hanging:
+Add this to `~/.ssh/config` (on Windows: `C:\Users\<you>\.ssh\config`). A dead link then closes after about 45 seconds instead of hanging:
 
 ```
 Host *
@@ -63,30 +75,34 @@ Host *
   ServerAliveCountMax 3
 ```
 
-A hung session can also be killed at once: press Enter, then type `~.`
+To close a hung session at once, press Enter, then type `~.`
 
 </details>
 
-## What you get
+## Commands
 
-| | |
+| Command | What it does |
 |---|---|
-| **Prompt hook** for PowerShell, zsh and bash | Switches mouse and focus reporting off before every prompt. Plain shell or PowerShell, so no Python runs at each prompt. |
-| **Windows console repair** | Turns virtual-terminal input back off when a dead program left it on, and flushes the queued garbage. |
-| **Queue cleanup** (zsh) | Drops mouse reports already waiting in the input queue and **keeps what you actually typed**, arrow keys included. |
-| `termrescue doctor` | Shows what's stuck right now. Exits 1 if anything is. |
-| `termrescue capture` | Records exactly what your terminal sends and decodes it. |
-| `termrescue fix` | Full manual reset: alternate screen, bracketed paste, cursor keys, kitty keyboard protocol. |
-| `termrescue run -- ssh host` | Runs a command, then resets the terminal however it exits. |
-| `termrescue uninstall` | Removes the hook and its profile line. |
+| `termrescue install` | Adds the prompt hook for PowerShell, zsh or bash. The hook is plain shell code. |
+| `termrescue doctor` | Shows which modes are on now. Exits 1 if a mode is stuck. |
+| `termrescue capture` | Records what your terminal sends and decodes it. |
+| `termrescue fix` | Full reset: also alternate screen, bracketed paste, cursor keys and the kitty keyboard protocol. |
+| `termrescue run -- ssh host` | Runs a command, then resets the terminal when the command stops. |
+| `termrescue uninstall` | Removes the hook. |
 
-## Diagnose
+At each prompt, the hook does this:
 
-`capture` turns the garbage into something readable:
+- It switches mouse reporting and focus reporting off.
+- On Windows, it turns virtual terminal input off if a dead program left it on. Then it empties the input queue.
+- In zsh, it removes mouse reports that are already in the input queue. It keeps what you typed, arrow keys too.
+
+## Find out what is stuck
+
+`capture` decodes the garbage:
 
 ```console
 $ termrescue capture
-Press q (or wait 10s) to stop. Move the mouse, click, switch windows: everything the terminal sends is recorded.
+Press q to stop, or wait 10 s. Move the mouse, click or switch windows. termrescue records all that the terminal sends.
 Raw: ^[[<35;45;23M^[[<35;46;23M^[[<0;46;23M^[[<0;46;23m^[[O
 ^[[<35;45;23M           mouse  sgr  button 35  column 45  row 23  (motion)
 ^[[<35;46;23M           mouse  sgr  button 35  column 46  row 23  (motion)
@@ -95,10 +111,10 @@ Raw: ^[[<35;45;23M^[[<35;46;23M^[[<0;46;23M^[[<0;46;23m^[[O
 ^[[O                    focus  out
 ```
 
-On Windows, `doctor` and `capture` also check the console input mode:
+On Windows, `doctor` and `capture` also show the console input mode:
 
 ```console
-Console input mode 0x03F7: virtual-terminal input is ON. PowerShell and cmd will read the terminal's escape codes (mouse reports, arrow keys) as typed text. `termrescue fix` turns it off.
+Console input mode 0x03F7: virtual terminal input is ON. PowerShell and cmd read the terminal's escape codes (mouse reports, arrow keys) as typed text. `termrescue fix` turns it off.
 ```
 
 ## How it works
@@ -108,48 +124,60 @@ sequenceDiagram
     autonumber
     participant App as Remote app (tmux, vim, Claude Code)
     participant Term as Your terminal
-    participant Shell as Your shell + termrescue
+    participant Shell as Your shell with termrescue
     App->>Term: turn mouse reporting on
     Note over App,Term: the SSH link drops, so the app never turns it off
-    Term->>Shell: every mouse move arrives as text
-    Shell->>Term: prompt hook sends the mouse and focus reporting off sequences
-    Shell->>Shell: Windows - console input mode repaired, queue flushed
-    Shell->>Shell: zsh - queued reports dropped, real typing kept
+    Term->>Shell: each mouse move arrives as text
+    Shell->>Term: the prompt hook sends "mouse and focus reporting off"
+    Shell->>Shell: Windows: repair the console input mode, empty the queue
+    Shell->>Shell: zsh: drop queued reports, keep real typing
 ```
 
-Terminal modes are switched on with `ESC [ ? n h` and off with `ESC [ ? n l`. Mouse reporting uses modes 9, 1000–1003 and 1005/1006/1015/1016, and focus reporting uses 1004. Sending "off" for all of them at a prompt is always safe, because nothing should be reporting when no program is running.
+A terminal mode goes on with `ESC [ ? n h` and off with `ESC [ ? n l`. Mouse reporting uses modes 9, 1000 to 1003, 1005, 1006, 1015 and 1016. Focus reporting uses mode 1004. At a prompt, no program should report mouse or focus events. So it is safe to send "off" for all of these modes each time.
 
-- **Windows:** the PowerShell hook reads the console mode with `GetConsoleMode`, clears `ENABLE_VIRTUAL_TERMINAL_INPUT` if it's set, and flushes the input queue. Its small native helper is compiled after your first command, so opening a terminal stays fast.
-- **zsh:** a `line-init` widget reads whatever input is pending, strips the mouse and focus reports, and pushes the rest back with `zle -U`. It chains with `add-zle-hook-widget`, so other plugins keep working.
+- **PowerShell:** the hook reads the console mode with `GetConsoleMode`. If `ENABLE_VIRTUAL_TERMINAL_INPUT` is set, it clears it and empties the input queue. The small native helper compiles after your first command, so a new terminal still opens fast.
+- **zsh:** a `line-init` widget reads the input that is waiting. It removes the mouse and focus reports and gives the rest back with `zle -U`. It uses `add-zle-hook-widget`, so other plugins still work.
+- **bash:** the hook goes first in `PROMPT_COMMAND` and passes on the last exit status unchanged.
 
-## Tested on real shells and consoles
+## Other ways to fix this
 
-CI runs on Windows, macOS and Linux. The integration tests drive real shells and real consoles, not mocks:
+termrescue is not the only fix. You can choose a smaller one:
+
+- Run `reset` after each drop. It also clears the screen, and PowerShell does not have it.
+- Add a `printf` of the "off" sequences to your own `PROMPT_COMMAND` or `precmd`. This is what the bash hook does.
+- Use an SSH wrapper such as [zc](https://github.com/marcbowes/zc). It restores the terminal and reconnects after a drop.
+
+termrescue adds the Windows console repair, the zsh queue cleanup and the `doctor` and `capture` tools.
+
+## Tests
+
+CI runs the tests on Windows, macOS and Linux. The integration tests drive real shells and real consoles:
 
 | Platform | What the tests do |
 |---|---|
-| **Windows** | Open a brand-new console, break it the way a dying `ssh.exe` does, then check that `termrescue fix` and the PowerShell hook repair it. The hook is tested in both **Windows PowerShell 5.1 and PowerShell 7**, including that your own prompt, `$LASTEXITCODE` and `$?` survive, so prompt themes such as starship still show failures. |
-| **zsh** | Run an interactive zsh in a pseudo-terminal. A program enables mouse reporting and is killed with `kill -9`, and the next prompt must reset it. Queued mouse reports followed by `echo kept` must run exactly `echo kept` (without termrescue, zsh would run fragments like `35` and `23Mecho` as commands). |
-| **bash** | Same reset check, and an existing `PROMPT_COMMAND` must keep working and still see the last command's exit status. |
-| **Everywhere** | `doctor`'s side of the terminal conversation, install idempotence (including UTF-16 profiles, and Windows line endings on Windows), and a check that every hook sends exactly the same reset sequence. |
+| **Windows** | Open a new console and break it the way a dying `ssh.exe` does. Then check that `termrescue fix` and the PowerShell hook repair it. Both **Windows PowerShell 5.1 and PowerShell 7** run the hook. Your own prompt, `$LASTEXITCODE` and `$?` must survive. |
+| **zsh** | Run zsh in a pseudo terminal. A program turns on mouse reporting and gets `kill -9`. The next prompt must reset it. Mouse reports queued before `echo kept` must leave exactly `echo kept`. Without termrescue, zsh runs fragments such as `35` and `23Mecho` as commands. |
+| **bash** | The same reset check. Your own `PROMPT_COMMAND` must still run and see the last exit status. The hook must also load under `set -u`. |
+| **All** | The `doctor` exchange with the terminal. Install and uninstall with UTF-16 profiles, bytes that are not UTF-8, Windows line endings, `ZDOTDIR` and macOS login files. A check that all three hooks send the same reset sequence. |
 
 ```sh
 uv run pytest -v -rs
 ```
 
+On macOS this gives 62 passed and 3 skipped. The 3 skipped tests need a Windows console.
+
 ## Limits
 
 - cmd.exe has no prompt hook. Use PowerShell, or run `termrescue fix`.
-- bash can't drop reports that were already queued, because it has no line-init hook.
-- `doctor`'s mode table depends on the terminal answering DECRQM queries. If it doesn't, the result shows "unknown" rather than a guess.
-- Terminal support hasn't been verified by hand yet.
+- bash cannot drop reports that are already queued, because it has no hook when the line editor starts.
+- `doctor` needs a terminal that answers DECRQM mode queries. If the terminal does not answer, `doctor` says the state is unknown.
+- I checked it by hand on my own machine only. There, the prompt hook switched the stuck mouse reporting off, and mouse moves stopped typing escape codes. Other terminals are not checked by hand yet.
 
 ## Roadmap
 
 - [ ] fish hook
-- [ ] winget / Scoop / Homebrew packages
-- [ ] Hand-verified support table: Windows Terminal, iTerm2, Ghostty, Terminal.app, kitty, WezTerm
-- [ ] Recorded demo GIF
+- [ ] winget, Scoop and Homebrew packages
+- [ ] A support table checked by hand: Windows Terminal, iTerm2, Ghostty, Terminal.app, kitty, WezTerm
 
 ## Licence
 
