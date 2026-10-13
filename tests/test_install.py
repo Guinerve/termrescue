@@ -222,3 +222,19 @@ def test_a_powershell_in_the_current_directory_is_never_used(monkeypatch):
     monkeypatch.setattr(install_module.shutil, "which", lambda name: f".\\{name}.EXE")
     monkeypatch.setattr(install_module.sys, "platform", "linux")
     assert install_module.powershell_executables() == []
+
+
+def test_cli_install_reports_a_file_it_cannot_write_without_a_traceback(
+        tmp_path, monkeypatch, capsys):
+    from termrescue import install as install_module
+    from termrescue.cli import main
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied", str(tmp_path / ".zshrc"))
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(install_module, "_write", refuse)
+    assert main(["install", "zsh"]) == 1
+    err = capsys.readouterr().err
+    assert ".zshrc" in err and "Permission denied" in err

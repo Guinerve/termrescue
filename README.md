@@ -164,7 +164,7 @@ CI runs the tests on Windows, macOS and Linux. The integration tests drive real 
 uv run pytest -v -rs
 ```
 
-On macOS this gives 62 passed and 3 skipped. The 3 skipped tests need a Windows console.
+On macOS this gives 63 passed and 3 skipped. The 3 skipped tests need a Windows console.
 
 ## Limits
 

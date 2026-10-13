@@ -70,6 +70,9 @@ def cmd_install(args: argparse.Namespace) -> int:
                    f" run:\n  termrescue init powershell > {hook}\n"
                    f"Then add this line to the file that `$PROFILE` names:\n  . '{hook}'")
         return 1
+    except OSError as exc:  # a startup file or the hook file can't be written
+        _error(args.cmd, f"cannot change {exc.filename}: {exc.strerror}")
+        return 1
 
 
 def _install_or_uninstall(cmd: str, shell: str, home: Path) -> int:
