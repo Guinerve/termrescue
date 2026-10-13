@@ -166,6 +166,32 @@ def test_the_line_in_profile_is_safe_for_sh_and_loads_the_hook_in_bash(tmp_path,
     assert "_termrescue_reset" in bash.stdout
 
 
+def test_the_line_in_profile_returns_success_in_a_shell_that_is_not_bash(tmp_path, monkeypatch):
+    # The line is often the last one in ~/.profile, so its status is the status of the file.
+    import shutil
+    import subprocess
+    import sys
+
+    import pytest
+
+    if sys.platform == "win32" or shutil.which("sh") is None:
+        pytest.skip("needs a Unix sh")
+    _on_macos(monkeypatch)
+    install("bash", tmp_path)
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    sh = subprocess.run(["sh", "-c", 'BASH_VERSION=""; . ~/.profile && echo ok'], env=env,
+                        capture_output=True, text=True, check=False)
+    assert (sh.stdout, sh.stderr) == ("ok\n", "")
+
+
+def test_uninstall_removes_the_older_and_line_from_profile(tmp_path, monkeypatch):
+    _on_macos(monkeypatch)
+    (tmp_path / ".profile").write_text(
+        'export LANG=en_AU.UTF-8\n[ -n "$BASH_VERSION" ] && . ~/.termrescue.bash  # termrescue\n')
+    uninstall("bash", tmp_path)
+    assert (tmp_path / ".profile").read_text() == "export LANG=en_AU.UTF-8\n"
+
+
 def test_install_bash_on_macos_creates_profile_when_there_is_no_login_file(tmp_path, monkeypatch):
     _on_macos(monkeypatch)
     install("bash", tmp_path)

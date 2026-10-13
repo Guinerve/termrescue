@@ -115,13 +115,22 @@ def _source_line(shell: str, hook: Path, rc: Path) -> str:
         return f". '{quoted}'  {_MARK}"
     if rc.name in _BASH_LOGIN_FILES:
         # ~/.profile is also read by sh, which has no `source` and can't parse the hook.
-        return f'[ -n "$BASH_VERSION" ] && . ~/{hook.name}  {_MARK}'
+        # `if` and not `&&`: the line is often last, and a false `&&` makes the file fail in sh.
+        return f'if [ -n "$BASH_VERSION" ]; then . ~/{hook.name}; fi  {_MARK}'
     return f"source ~/{hook.name}  {_MARK}"
+
+
+def _older_source_lines(hook: Path, rc: Path) -> tuple[str, ...]:
+    """Lines that earlier versions wrote, so uninstall still removes them."""
+    if rc.name in _BASH_LOGIN_FILES:
+        return (f'[ -n "$BASH_VERSION" ] && . ~/{hook.name}  {_MARK}',)
+    return ()
 
 
 def _is_source_line(line: str, shell: str, hook: Path, rc: Path) -> bool:
     """True only for the exact line `install` writes, so users' own lines are left alone."""
-    return line.strip() == _source_line(shell, hook, rc)
+    stripped = line.strip()
+    return stripped == _source_line(shell, hook, rc) or stripped in _older_source_lines(hook, rc)
 
 
 def _read(path: Path) -> tuple[str, str, str]:
